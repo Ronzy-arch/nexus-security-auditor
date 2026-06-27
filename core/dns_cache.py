@@ -1,21 +1,14 @@
-"""
-DNS Resolution Cache untuk optimisasi performa
-Mencegah DNS lookup berulang untuk hostname yang sama
-"""
+"""DNS Resolution Cache untuk optimisasi performa"""
 import socket
 import threading
 import time
 import logging
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
 
 class DNSCache:
-    """
-    Thread-safe DNS resolution cache dengan TTL support.
-    Default TTL: 300 seconds (5 menit)
-    """
+    """Thread-safe DNS resolution cache dengan TTL support."""
     
     def __init__(self, ttl=300, max_size=1000):
         self.ttl = ttl
@@ -26,11 +19,7 @@ class DNSCache:
         self.misses = 0
     
     def resolve(self, hostname):
-        """
-        Resolve hostname dengan cache.
-        Return: IP address (str) atau None jika gagal
-        """
-        # Quick check tanpa lock untuk read performance
+        """Resolve hostname dengan cache."""
         if hostname in self.cache:
             ip, timestamp = self.cache[hostname]
             if time.time() - timestamp < self.ttl:
@@ -38,24 +27,18 @@ class DNSCache:
                 logger.debug(f"DNS cache hit: {hostname} -> {ip}")
                 return ip
         
-        # Cache miss atau expired, lakukan resolve
         try:
             with self.lock:
-                # Double-check setelah acquire lock
                 if hostname in self.cache:
                     ip, timestamp = self.cache[hostname]
                     if time.time() - timestamp < self.ttl:
                         self.hits += 1
                         return ip
                 
-                # Resolve
                 ip = socket.gethostbyname(hostname)
                 
-                # Store dengan timestamp
                 if len(self.cache) >= self.max_size:
-                    # Simple eviction: remove oldest entry
-                    oldest_key = min(self.cache.keys(), 
-                                   key=lambda k: self.cache[k][1])
+                    oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
                     del self.cache[oldest_key]
                 
                 self.cache[hostname] = (ip, time.time())
@@ -91,7 +74,6 @@ class DNSCache:
         }
 
 
-# Global DNS cache instance
 _global_dns_cache = None
 
 
