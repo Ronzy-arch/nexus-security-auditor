@@ -1,13 +1,18 @@
 from core.module_loader import ModuleLoader
 from core.reporter import Reporter
 from core.risk import RiskEngine
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Scanner:
-    def __init__(self):
+    def __init__(self, max_workers=6):
         self.loader = ModuleLoader()
         self.reporter = Reporter()
         self.risk = RiskEngine()
+        self.max_workers = max_workers
 
     def run(self, target="localhost"):
         results = []
@@ -37,33 +42,35 @@ class Scanner:
                         print(f"[⚡ REDIRECT] Mengalihkan target pemindaian berikutnya langsung ke Server Internal: {origin_ip_discovered}")
                         active_target = origin_ip_discovered
             except Exception as e:
+                logger.error(f"Gagal mengeksekusi modul jaringan awal: {str(e)}")
                 print(f"[!] Gagal mengeksekusi modul jaringan awal: {str(e)}")
 
-        # Langkah Kedua: Jalankan sisa modul lainnya menggunakan target aktif (yang mungkin sudah dialihkan)
-        for module in modules:
-            # Lewati modul jaringan karena sudah dieksekusi di awal
-            if module.name == "Remote Connectivity & Origin IP Audit":
-                continue
-
-            try:
-                # Eksekusi modul menggunakan target aktif (Domain atau IP Internal yang bocor)
+        # Langkah Kedua: Jalankan sisa modul lainnya secara paralel menggunakan ThreadPoolExecutor
+        remaining_modules = [m for m in modules if m.name != "Remote Connectivity & Origin IP Audit"]
+        
+        print(f"[*] Menjalankan {len(remaining_modules)} modul audit secara paralel (max_workers={self.max_workers})...")
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit semua task ke thread pool
+            future_to_module = {}
+            for module in remaining_modules:
+                future = executor.submit(self._run_module_safe, module, active_target)
+                future_to_module[future] = module
+            
+            # Kumpulkan hasil sebagai completed
+            for future in as_completed(future_to_module):
+                module = future_to_module[future]
                 try:
-                    result = module.run(target=active_target)
-                except TypeError:
-                    result = module.run()
-
-                if isinstance(result, dict):
-                    result["target"] = active_target
-
-                results.append(result)
-
-            except Exception as exc:
-                results.append({
-                    "module": getattr(module, "name", module.__class__.__name__),
-                    "target": active_target,
-                    "status": "ERROR",
-                    "details": str(exc)
-                })
+                    result = future.result()
+                    results.append(result)
+                except Exception as exc:
+                    logger.error(f"Modul {module.name} gagal: {str(exc)}")
+                    results.append({
+                        "module": getattr(module, "name", module.__class__.__name__),
+                        "target": active_target,
+                        "status": "ERROR",
+                        "details": str(exc)
+                    })
 
         # Hitung tingkat risiko berdasarkan gabungan temuan
         risk = self.risk.calculate(results)
@@ -80,3 +87,24 @@ class Scanner:
         self.reporter.write(report)
         print(f"[+] Pemindaian selesai. Hasil akhir dikompilasi dengan status risiko: {risk}")
         return report
+
+    def _run_module_safe(self, module, target):
+        """Helper method untuk menjalankan modul dengan error handling yang baik."""
+        try:
+            try:
+                result = module.run(target=target)
+            except TypeError:
+                result = module.run()
+
+            if isinstance(result, dict):
+                result["target"] = target
+
+            return result
+        except Exception as exc:
+            logger.error(f"Modul {module.name} exception: {str(exc)}")
+            return {
+                "module": getattr(module, "name", module.__class__.__name__),
+                "target": target,
+                "status": "ERROR",
+                "details": str(exc)
+            }
