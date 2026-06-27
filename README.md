@@ -1,62 +1,42 @@
 # Nexus Security Auditor
 
-> A modular defensive security auditing framework for web applications based on OWASP security assessment principles.
-
-![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![Version](https://img.shields.io/badge/Version-1.0.0-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-
-## Overview
-
-Nexus Security Auditor is a modular security auditing framework designed for defensive security assessments of web applications.
-
-The project focuses on identifying common security weaknesses using OWASP-aligned auditing techniques while producing structured reports suitable for developers and security teams.
+A modular defensive security auditing framework for web applications based on OWASP security assessment principles.
 
 ## Features
 
-- Modular audit architecture
-- OWASP-inspired security assessment
-- HTTP security header analysis
-- Technology fingerprinting
-- WAF detection
-- SSL/TLS inspection
-- Report generation
-- JSON output support
-- Extensible plugin system
-- Command-line interface
+- Modular audit framework
+- OWASP-aligned security checks
+- Extensible plugin architecture
+- Structured security reports
+- CLI interface
+- Automated testing
+- Logging support
 
 ## Project Structure
 
 ```
-nexus-security-auditor/
+.
+├── CHANGELOG.md
+├── LICENSE
+├── Makefile
+├── README.md
 ├── core/
-├── modules/
-├── reports/
-├── tests/
 ├── docs/
-├── config/
+├── logs/
 ├── main.py
+├── modules/
+├── pyproject.toml
+├── reports/
 ├── requirements.txt
-└── README.md
+├── templates/
+└── tests/
 ```
 
 ## Installation
 
-Clone the repository:
-
 ```bash
 git clone https://github.com/Ronzy-arch/nexus-security-auditor.git
-```
-
-Enter the project directory:
-
-```bash
 cd nexus-security-auditor
-```
-
-Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -80,55 +60,36 @@ Run tests:
 pytest
 ```
 
-## Security Modules
+## Directory Overview
 
-- HTTP Header Analysis
-- WAF Detection
-- SSL/TLS Audit
-- Technology Detection
-- Server Fingerprinting
-- OWASP-Based Checks
-- Reporting Engine
+| Directory | Purpose |
+|-----------|---------|
+| core | Core framework components |
+| modules | Audit modules |
+| reports | Generated reports |
+| templates | Report templates |
+| logs | Runtime logs |
+| tests | Unit and integration tests |
+| docs | Project documentation |
 
-## Reporting
+## Development
 
-Supported report formats include:
+Install development dependencies:
 
-- JSON
-- Console Output
-- HTML (planned)
-- PDF (planned)
+```bash
+pip install -r requirements.txt
+```
 
-## Roadmap
+Run tests:
 
-### Version 1.0
-
-- Core Framework
-- Plugin Architecture
-- Security Modules
-- Reporting Engine
-- Stable CLI
-
-### Future Versions
-
-- Additional OWASP modules
-- Dashboard
-- API Interface
-- CI/CD Integration
-- Advanced Reporting
-
-## Contributing
-
-Contributions are welcome.
-
-Please open an Issue before submitting major changes.
-
-## Disclaimer
-
-This software is intended exclusively for defensive security testing, authorized penetration testing, educational purposes, and security research conducted with proper permission.
-
-Users are solely responsible for ensuring compliance with all applicable laws and regulations.
+```bash
+pytest
+```
 
 ## License
 
-MIT License
+MIT License.
+
+## Disclaimer
+
+This project is intended for authorized security assessments, defensive security research, and educational purposes only. Users are responsible for ensuring all activities comply with applicable laws and obtain proper authorization before auditing any system.
