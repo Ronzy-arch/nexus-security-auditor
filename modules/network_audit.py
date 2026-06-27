@@ -2,6 +2,10 @@ import socket
 import subprocess
 import platform
 from core.base_module import BaseAuditModule
+from core.dns_cache import get_dns_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class NetworkAudit(BaseAuditModule):
@@ -9,8 +13,12 @@ class NetworkAudit(BaseAuditModule):
 
     def run(self, target="localhost"):
         try:
-            # 1. Resolusi IP Utama
-            target_ip = socket.gethostbyname(target)
+            dns_cache = get_dns_cache()
+            
+            # 1. Resolusi IP Utama dengan cache
+            target_ip = dns_cache.resolve(target)
+            if not target_ip:
+                target_ip = socket.gethostbyname(target)
             
             # Daftar subdomain yang sering melewatkan konfigurasi WAF/Proxy
             common_subdomains = ("mail", "ftp", "dev", "staging", "cpanel", "direct", "admin", "test")
@@ -24,7 +32,12 @@ class NetworkAudit(BaseAuditModule):
                 for sub in common_subdomains:
                     subdomain_full = f"{sub}.{clean_domain}"
                     try:
-                        sub_ip = socket.gethostbyname(subdomain_full)
+                        # Gunakan DNS cache untuk resolution
+                        sub_ip = dns_cache.resolve(subdomain_full)
+                        if sub_ip is None:
+                            # Fallback jika cache gagal
+                            sub_ip = socket.gethostbyname(subdomain_full)
+                        
                         # Jika IP subdomain berbeda dengan IP utama, ada kemungkinan itu IP internal asli
                         if sub_ip != target_ip and sub_ip not in [item["ip"] for item in origin_ip_leads]:
                             origin_ip_leads.append({
@@ -32,20 +45,24 @@ class NetworkAudit(BaseAuditModule):
                                 "ip": sub_ip,
                                 "status": "POTENTIAL_ORIGIN_LEAK"
                             })
-                    except socket.gaierror:
+                    except (socket.gaierror, Exception):
                         continue
 
             # 2. Network Ping untuk verifikasi keaktifan host utama
             param = "-n" if platform.system().lower() == "windows" else "-c"
             command = ["ping", param, "1", target_ip]
-            ping_run = subprocess.run(
-                command, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
-                text=True, 
-                timeout=2.5
-            )
-            host_status = "ALIVE / ONLINE" if ping_run.returncode == 0 else "UNREACHABLE / FILTERED"
+            try:
+                ping_run = subprocess.run(
+                    command, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE, 
+                    text=True, 
+                    timeout=2.5
+                )
+                host_status = "ALIVE / ONLINE" if ping_run.returncode == 0 else "UNREACHABLE / FILTERED"
+            except Exception as ping_error:
+                logger.warning(f"Ping failed: {str(ping_error)}")
+                host_status = "PING_UNAVAILABLE"
 
             return {
                 "module": self.name,
@@ -59,6 +76,7 @@ class NetworkAudit(BaseAuditModule):
             }
 
         except Exception as e:
+            logger.error(f"Network audit error: {str(e)}")
             return {
                 "module": self.name,
                 "target": target,

@@ -2,6 +2,11 @@ import http.client
 import urllib.parse
 import random
 from core.base_module import BaseAuditModule
+from core.http_pool import get_http_pool
+from core.retry_handler import RetryHandler
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class WafDetector(BaseAuditModule):
@@ -32,7 +37,7 @@ class WafDetector(BaseAuditModule):
         try:
             clean_target = target.replace("http://", "").replace("https://", "")
             if "/" in clean_target:
-                clean_target = clean_target.split("/")
+                clean_target = clean_target.split("/")[0]
 
             provocation_payload = urllib.parse.quote("<script>alert('nexus_provoke');</script> SELECT * FROM users;")
             provoke_path = f"/?test={provocation_payload}"
@@ -43,13 +48,26 @@ class WafDetector(BaseAuditModule):
                 "Connection": "close"
             }
 
-            conn = http.client.HTTPConnection(clean_target, port=80, timeout=3.0)
-            conn.request("GET", provoke_path, headers=headers)
-            response = conn.getresponse()
-            
-            response_headers = {k.lower(): v.lower() for k, v in response.getheaders()}
-            response_body = response.read().decode('utf-8', errors='ignore').lower()
-            conn.close()
+            http_pool = get_http_pool()
+            retry_handler = RetryHandler(max_retries=2, initial_delay=0.3)
+
+            def make_request():
+                conn = http_pool.get_connection(clean_target, port=80, timeout=3.0)
+                conn.request("GET", provoke_path, headers=headers)
+                response = conn.getresponse()
+                
+                # Stream response
+                response_headers = {k.lower(): v.lower() for k, v in response.getheaders()}
+                response_body = b''
+                for chunk in iter(lambda: response.read(4096), b''):
+                    response_body += chunk
+                    if len(response_body) > 500000:
+                        break
+                
+                response_body = response_body.decode('utf-8', errors='ignore').lower()
+                return response.status, response_headers, response_body
+
+            status, response_headers, response_body = retry_handler.execute(make_request)
             
             if "server" in response_headers and "cloudflare" in response_headers["server"]:
                 waf_detected = "Cloudflare Web Application Firewall"
@@ -75,10 +93,10 @@ class WafDetector(BaseAuditModule):
                 confidence = "HIGH"
                 details = "Sidik jari ditemukan pada sistem penamaan server Akamai Edge."
 
-            elif response.status in (403, 406, 499):
+            elif status in (403, 406, 499):
                 waf_detected = "Generic / Custom Web Application Firewall"
                 confidence = "MEDIUM"
-                details = f"Paket provokasi diblokir dengan kode status HTTP {response.status}. Sistem keamanan aktif menolak input berbahaya."
+                details = f"Paket provokasi diblokir dengan kode status HTTP {status}. Sistem keamanan aktif menolak input berbahaya."
 
             return {
                 "module": self.name,
@@ -92,6 +110,7 @@ class WafDetector(BaseAuditModule):
             }
 
         except Exception as e:
+            logger.error(f"WAF detector error: {str(e)}")
             return {
                 "module": self.name,
                 "target": target,
