@@ -1,1 +1,104 @@
- 
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Security Audit Report - {{ target }}</title>
+    <script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen">
+
+    <!-- Header / Navigasi -->
+    <header class="border-b border-gray-800 bg-gray-950 px-6 py-4 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-wider text-teal-400">NEXUS SECURITY AUDITOR</h1>
+                <p class="text-xs text-gray-400 mt-1">Defensive Security Assessment Framework</p>
+            </div>
+            <div class="text-right">
+                <span class="text-sm bg-gray-800 px-3 py-1.5 rounded border border-gray-700 block md:inline-block">
+                    Target: <strong class="text-white">{{ target }}</strong>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 space-y-6">
+        
+        <!-- Ringkasan Tingkat Risiko -->
+        <section class="p-6 rounded-lg bg-gray-950 border border-gray-800 shadow-sm">
+            <h2 class="text-sm font-semibold tracking-wider text-gray-400 uppercase mb-3">Status Kesimpulan Risiko</h2>
+            <div class="flex items-center gap-4 p-4 rounded bg-gray-900/50 border {% if 'HIGH' in risk %}border-red-500/30{% elif 'MEDIUM' in risk %}border-amber-500/30{% else %}border-emerald-500/30{% endif %}">
+                <div class="h-4 w-4 rounded-full {% if 'HIGH' in risk %}bg-red-500 shadow-[0_0_12px_#ef4444]{% elif 'MEDIUM' in risk %}bg-amber-500 shadow-[0_0_12px_#f59e0b]{% else %}bg-emerald-500 shadow-[0_0_12px_#10b981]{% endif %}"></div>
+                <div>
+                    <p class="text-lg font-bold text-white tracking-wide">{{ risk }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detail Hasil Per Modul Audit -->
+        <section class="space-y-4">
+            <h2 class="text-sm font-semibold tracking-wider text-gray-400 uppercase">Daftar Temuan Modul Eksternal</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for res in results %}
+                <div class="p-5 rounded-lg bg-gray-950 border border-gray-800 flex flex-col justify-between shadow-sm hover:border-gray-700 transition">
+                    <div>
+                        <!-- Header Modul -->
+                        <div class="flex justify-between items-start gap-2 mb-3">
+                            <h3 class="text-base font-bold text-teal-300 tracking-wide">{{ res.module }}</h3>
+                            <span class="text-xs px-2 py-0.5 rounded font-mono font-semibold {% if res.status == 'OK' %}bg-emerald-950 text-emerald-400 border border-emerald-800{% else %}bg-red-950 text-red-400 border border-red-800{% endif %}">
+                                {{ res.status }}
+                            </span>
+                        </div>
+
+                        <!-- Konten Deteksi Utama -->
+                        <div class="text-sm text-gray-300 space-y-2 font-mono bg-gray-900/40 p-3 rounded border border-gray-900">
+                            {% if res.status == 'ERROR' %}
+                                <p class="text-red-400 font-semibold">⚠️ Masalah Teknis:</p>
+                                <p class="text-xs text-gray-400 break-words">{{ res.details }}</p>
+                            {% else %}
+                                <!-- Tampilan kondisional isi data berdasarkan tipe data -->
+                                {% if res.services is defined and res.services is iterable and res.services is not string %}
+                                    <p class="text-xs text-gray-400 mb-1">Port Terbuka ditemukan (Count: {{ res.count }}):</p>
+                                    {% if res.count == 0 %} <span class="text-gray-500">Tidak ada port publik terdeteksi</span> {% endif %}
+                                    {% for svc in res.services %}
+                                        <div class="text-xs text-white">🔹 Port <span class="text-teal-400 font-bold">{{ svc.port }}</span> ({{ svc.status }})</div>
+                                    {% endfor %}
+                                {% elif res.network_data is defined %}
+                                    <p class="text-xs">IP: <span class="text-white">{{ res.network_data.resolved_ip }}</span></p>
+                                    <p class="text-xs">Status Jaringan: <span class="{% if 'ALIVE' in res.network_data.host_status %}text-emerald-400{% else %}text-red-400{% endif %} font-bold">{{ res.network_data.host_status }}</span></p>
+                                {% elif res.data is defined %}
+                                    {% if res.data.fingerprints is string %}
+                                        <p class="text-xs text-gray-400">{{ res.data.fingerprints }}</p>
+                                    {% else %}
+                                        {% for k, v in res.data.fingerprints.items() %}
+                                            <p class="text-xs"><span class="text-gray-400">{{ k }}:</span> <span class="text-white">{{ v }}</span></p>
+                                        {% endfor %}
+                                    {% endif %}
+                                {% elif res.results is string %}
+                                    <p class="text-xs text-gray-400">{{ res.results }}</p>
+                                {% elif res.results is defined and res.results is iterable %}
+                                    {% for item in res.results %}
+                                        <div class="text-xs border-b border-gray-900/60 pb-1 mb-1 last:border-0 last:pb-0 last:mb-0">
+                                            <span class="{% if item.status == 'MISSING' %}text-amber-400{% else %}text-emerald-400{% endif %} font-bold">[{{ item.status }}]</span> {{ item.header or item.name }}
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-xs text-gray-500">Pemindaian selesai tanpa eksposisi publik.</p>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+
+    <footer class="text-center py-6 text-xs text-gray-500 border-t border-gray-800 mt-12 bg-gray-950">
+        &copy; 2026 Nexus Security Auditor Framework. Generated automatically.
+    </footer>
+
+</body>
+</html>
